@@ -1,0 +1,28 @@
+<?xml version="1.0"?>
+<EmbeddedProjectSample xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+	<Name>LEDBlink</Name>
+	<Description>This is a very basic sample project - a classical blinking LED example.</Description>
+	<ConfigurableProperties>
+	<PropertyGroups>
+	<PropertyGroup>
+	  <Properties>
+		<PropertyEntry xsi:type="Integral">
+		  <Name>LED Pin Number</Name>
+		  <UniqueID>com.sysprogs.examples.ledblink.LEDPIN</UniqueID>
+		  <Description>Specifies the pin number of the LED port</Description>
+		  <DefaultValue>0</DefaultValue>
+		  <MinValue>0</MinValue>
+		  <MaxValue>9</MaxValue>
+		</PropertyEntry>
+		<PropertyEntry xsi:type="Integral">
+		  <Name>Delay (cycles)</Name>
+		  <UniqueID>com.sysprogs.examples.ledblink.DELAY</UniqueID>
+		  <Description>Specifies the delay (in cycles) between LED toggling events</Description>
+		  <DefaultValue>10000</DefaultValue>
+		</PropertyEntry>
+	  </Properties>
+	  <CollapsedByDefault>false</CollapsedByDefault>
+	</PropertyGroup>
+	</PropertyGroups>
+	</ConfigurableProperties>
+</EmbeddedProjectSample>
