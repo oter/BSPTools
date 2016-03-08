@@ -116,7 +116,9 @@ namespace BSPGenerationTools
                 Directory.CreateDirectory(Path.GetDirectoryName(fn));
                 using (var sw = File.CreateText(fn))
                 {
-                    if (Vectors[0].Name != "_estack" || Vectors[1].Name != "Reset_Handler")
+                    // Reset handler in CC26xx MCU's family differ from other MCUs, so
+                    // workaround added
+                    if (Vectors[0].Name != "_estack" || (Vectors[1].Name != "Reset_Handler" && Vectors[1].Name != "ResetISR"))
                         throw new Exception("Unexpected vector table layout");
 
                     var templateLines = File.ReadAllLines("StartupFileTemplate.c");
