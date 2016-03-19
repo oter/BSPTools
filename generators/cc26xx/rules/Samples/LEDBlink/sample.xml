@@ -10,7 +10,7 @@
 		  <Name>LED Pin Number</Name>
 		  <UniqueID>com.sysprogs.examples.ledblink.LEDPIN</UniqueID>
 		  <Description>Specifies the pin number of the LED port</Description>
-		  <DefaultValue>0</DefaultValue>
+		  <DefaultValue>6</DefaultValue>
 		  <MinValue>0</MinValue>
 		  <MaxValue>9</MaxValue>
 		</PropertyEntry>
@@ -18,7 +18,7 @@
 		  <Name>Delay (cycles)</Name>
 		  <UniqueID>com.sysprogs.examples.ledblink.DELAY</UniqueID>
 		  <Description>Specifies the delay (in cycles) between LED toggling events</Description>
-		  <DefaultValue>10000</DefaultValue>
+		  <DefaultValue>500000</DefaultValue>
 		</PropertyEntry>
 	  </Properties>
 	  <CollapsedByDefault>false</CollapsedByDefault>

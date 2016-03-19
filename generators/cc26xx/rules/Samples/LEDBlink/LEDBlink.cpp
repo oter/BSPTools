@@ -1,20 +1,18 @@
-#include <driverlib.h>
+#include <gpio.h>
+#include <ioc.h>
+#include <driverlib/sys_ctrl.h>
 
-#include <stdint.h>
-#include <stdbool.h>
+#define LED_IO_$$com.sysprogs.examples.ledblink.LEDPIN$$ IOID_$$com.sysprogs.examples.ledblink.LEDPIN$$
 
 int main(void)
-{
-    volatile uint32_t ii;
+{	
+	SysCtrlPowerEverything();
+	IOCPinTypeGpioOutput(LED_IO_$$com.sysprogs.examples.ledblink.LEDPIN$$);
+	GPIO_writeDio(LED_IO_$$com.sysprogs.examples.ledblink.LEDPIN$$, 1);
 
-    // TODO: Blink a led
-
-    // $$com.sysprogs.examples.msp432.ROMPREFIX$$WDT_A_holdTimer();
-    // $$com.sysprogs.examples.msp432.ROMPREFIX$$GPIO_setAsOutputPin(GPIO_PORT_$$com.sysprogs.examples.ledblink.LEDPORT$$, GPIO_PIN$$com.sysprogs.examples.ledblink.LEDBIT$$);
-
-    // while (1)
-    // {
-    //     for(ii=0; ii < $$com.sysprogs.examples.ledblink.DELAY$$; ii++);
-    //     $$com.sysprogs.examples.msp432.ROMPREFIX$$GPIO_toggleOutputOnPin(GPIO_PORT_$$com.sysprogs.examples.ledblink.LEDPORT$$, GPIO_PIN$$com.sysprogs.examples.ledblink.LEDBIT$$);
-    // }
+	while (1)
+	{
+		CPUdelay($$com.sysprogs.examples.ledblink.DELAY$$);
+		GPIO_toggleDio(LED_IO_$$com.sysprogs.examples.ledblink.LEDPIN$$);
+	}
 }
