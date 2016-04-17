@@ -54,6 +54,14 @@ namespace BSPGenerationTools
         public string LinkerScriptPath;
         public string StartupFile;
         public string MCUDefinitionFile;
+        public override bool Equals(Object obj)
+        {
+            //MCUBuilder m1 = (MCUBuilder)obj;
+            if (Name == ((MCUBuilder)obj).Name)
+                return true;
+            else
+                return false;
+        }
 
         public override string ToString()
         {
@@ -67,8 +75,8 @@ namespace BSPGenerationTools
             if (string.IsNullOrEmpty(StartupFile))
                 throw new Exception("Startup file not defined for " + Name);
             if (string.IsNullOrEmpty(MCUDefinitionFile) && requirePeripheralRegisters)
-                 throw new Exception("Peripheral register definition not found for " + Name);
- 
+                throw new Exception("Peripheral register definition not found for " + Name);
+
             var mcu = new MCU
             {
                 ID = Name,
@@ -180,9 +188,14 @@ namespace BSPGenerationTools
 
         public abstract void GetMemoryBases(out uint flashBase, out uint ramBase);
 
+        protected virtual LinkerScriptTemplate GetTemplateForMCU(MCUBuilder mcu)
+        {
+            return LDSTemplate;
+        }
+
         public virtual void GenerateLinkerScriptsAndUpdateMCU(string ldsDirectory, string familyFilePrefix, MCUBuilder mcu, MemoryLayout layout, string generalizedName)
         {
-            using (var gen = new LdsFileGenerator(LDSTemplate, layout))
+            using (var gen = new LdsFileGenerator(GetTemplateForMCU(mcu), layout))
             {
                 using (var sw = new StreamWriter(Path.Combine(ldsDirectory, generalizedName + "_flash.lds")))
                     gen.GenerateLdsFile(sw);
@@ -203,14 +216,14 @@ namespace BSPGenerationTools
         {
             if (primaryHeaderDir != null && primaryHeaderDir.Contains("$$"))
                 foreach (var entry in SystemVars)
-                    primaryHeaderDir = primaryHeaderDir.Replace(entry.Key, entry.Value);   
+                    primaryHeaderDir = primaryHeaderDir.Replace(entry.Key, entry.Value);
         }
 
-        internal void ExpandAdditionalVariables(ref string strSources, SysVarEntry[] AddVariables )
+        internal void ExpandAdditionalVariables(ref string strSources, SysVarEntry[] AddVariables)
         {
-            if (AddVariables!=null && strSources.Contains("$$"))
+            if (AddVariables != null && strSources.Contains("$$"))
                 foreach (var entry in AddVariables)
-                    strSources = strSources.Replace("$$"+entry.Key+ "$$", entry.Value);
+                    strSources = strSources.Replace("$$" + entry.Key + "$$", entry.Value);
         }
     }
 
@@ -360,7 +373,6 @@ namespace BSPGenerationTools
                 family.ConfigurableProperties.Import(Definition.ConfigurableProperties);
             }
 
-
             return family;
         }
 
@@ -462,7 +474,7 @@ namespace BSPGenerationTools
             }
         }
 
-        
+
         public IEnumerable<EmbeddedFramework> GenerateFrameworkDefinitions()
         {
             if (Definition.AdditionalFrameworks != null)
@@ -549,8 +561,8 @@ namespace BSPGenerationTools
                     if (sampleObj.MCUFilterRegex == null & allFrameworks != null && sampleObj.RequiredFrameworks != null)
                     {
                         string[] devices = null;
-                        
-                        foreach(var fw in allFrameworks)
+
+                        foreach (var fw in allFrameworks)
                         {
                             if (fw.MCUFilterRegex == null)
                                 continue;
@@ -603,7 +615,7 @@ namespace BSPGenerationTools
                 }
 
                 if (!matched)
-                      throw new Exception("Cannot find a peripheral register set for " + mcu.Name);
+                    throw new Exception("Cannot find a peripheral register set for " + mcu.Name);
             }
 
         }
@@ -645,8 +657,8 @@ namespace BSPGenerationTools
                     var rgUnsupported = string.IsNullOrEmpty(classifier.UnsupportedMCUs) ? null : new Regex(classifier.UnsupportedMCUs);
                     foreach (var mcu in removed)
                         if (rgUnsupported == null || !rgUnsupported.IsMatch(mcu.Name))
-                             throw new Exception(mcu.Name + " is not marked as unsupported, but cannot be categorized");
-                 }
+                            throw new Exception(mcu.Name + " is not marked as unsupported, but cannot be categorized");
+                }
 
                 removedMCUs.AddRange(removed);
             }
@@ -676,6 +688,24 @@ namespace BSPGenerationTools
                     return CortexCore.M4;
                 case "ARM Cortex-M7":
                     return CortexCore.M7;
+                case "Cortex-M0":
+                    return CortexCore.M0;
+                case "Cortex-M0+":
+                    return CortexCore.M0Plus;
+                case "Cortex-M3":
+                    return CortexCore.M3;
+                case "Cortex-M3 ":
+                    return CortexCore.M3;
+                case "Cortex-M4":
+                    return CortexCore.M4;
+                case "Cortex-M4F": //FPU
+                    return CortexCore.M4;
+                case "Cortex-M4F;M0"://MultiCore
+                    return CortexCore.M4;
+                case "Cortex-M4F; Cortex-M0+"://MultiCore
+                    return CortexCore.M4;
+                case "Cortex-M7":
+                    return CortexCore.M7;
                 default:
                     return CortexCore.Invalid;
             }
@@ -687,8 +717,11 @@ namespace BSPGenerationTools
 
             bool header_row = true;
             Dictionary<string, int> headers = new Dictionary<string, int>();
-            foreach (var line in File.ReadAllLines(filePath))
+            string[] strFileMCU = File.ReadAllLines(filePath);
+
+            for (int il = 0; il < strFileMCU.Length; il++)
             {
+                string line = strFileMCU[il];
                 string[] items = line.Split(',');
 
                 if (header_row)
@@ -706,7 +739,7 @@ namespace BSPGenerationTools
                     FlashSize = Int32.Parse(items[headers[flashSizeColumn]]),
                     RAMSize = Int32.Parse(items[headers[ramSizeColumn]]),
                 };
-                             
+
                 if (coreColumn != null)
                     mcu.Core = ParseCoreName(items[headers[coreColumn]]);
 
@@ -716,7 +749,9 @@ namespace BSPGenerationTools
                     mcu.RAMSize *= 1024;
                 }
 
-                rawmcu_list.Add(mcu);
+                if (rawmcu_list.IndexOf(mcu) < 0)
+                    rawmcu_list.Add(mcu);
+
             }
 
             return rawmcu_list;
