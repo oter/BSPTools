@@ -1,464 +1,381 @@
-﻿/* Copyright (c) 2016 Sysprogs OU. All Rights Reserved.
-   This software is licensed under the Sysprogs BSP Generator License.
-   https://github.com/sysprogs/BSPTools/blob/master/LICENSE
-*/
-
-using BSPEngine;
+﻿using BSPEngine;
 using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Text;
 using System.Text.RegularExpressions;
 
 namespace cc26xx_bsp_generator
 {
-    internal class RegistersParser
+    static class PeripheralRegisterGenerator
     {
-        private static string[] REGISTERS_WITH_WRONG_BITS_SUM = {
-            "DMA->STAT",
-            "DMA->CFG",
-            "DMA->CTLBASE",
-            "DMA->ERRCLR",
-            "EUSCI_A0->IRCTL",
-            "EUSCI_A1->IRCTL",
-            "EUSCI_A2->IRCTL",
-            "EUSCI_A3->IRCTL"};
+        private static int REGISTER_LENGTH_IN_BITS = 32;
 
-        private static readonly Regex REGISTER_SET_BEGIN = new Regex(@"[ \t]*typedef\s+struct\s*{", RegexOptions.Singleline);
-        private static readonly Regex REGISTER_BEGIN = new Regex(@"[ \t]*union\s*{\s*\/\*\s*([\w]+\s+Register)\s*\*\/", RegexOptions.Singleline);
-        private static readonly Regex REGISTER_DEFINITION = new Regex(@"[ \t]*(__I|__O|__IO)+\s+uint(8|16|32)_t\s+r\s*;", RegexOptions.Singleline);
-        private static readonly Regex REGISTER_WITHOUT_SUBREGISTERS = new Regex(@"[ \t]*(__I|__O|__IO)+\s+uint(8|16|32)_t\s+r([\w]+)\s*;\s*(.*)?", RegexOptions.Singleline);
-        private static readonly Regex SUBREGISTERS_BEGIN = new Regex(@"[ \t]*struct\s*{\s*\/\*\s*([\w]+\s+Bits)\s*\*\/", RegexOptions.Singleline);
-        private static readonly Regex SUBREGISTER_DEFINITION = new Regex(@"[ \t]*(__I|__O|__IO)\s+uint(8|16|32)_t\s+b([\w]*)\s*:\s*([\d]+)\s*;\s*\/\*\s*(.*)\*\/", RegexOptions.Singleline);
-        private static readonly Regex SUBREGISTERS_END = new Regex(@"[ \t]*}\s*(b|a)\s*;", RegexOptions.Singleline);
-        private static readonly Regex REGISTER_END = new Regex(@"[ \t]*}\s*r([\w]+)\s*;", RegexOptions.Singleline);
-        private static readonly Regex REGISTER_SET_END = new Regex(@"[ \t]*} ([\w]+)_Type\s*;", RegexOptions.Singleline);
-        private static readonly Regex RESERVED_BITS = new Regex(@"[ \t]*(__I|__O|__IO)*\s*uint(8|16|32)_t\s+(RESERVED[\d]*)\s*\[([\d]+)\]\s*;", RegexOptions.Singleline);
-        private static readonly Regex REGISTER_ADDRESS = new Regex(@"[ \t]*#define[ \t]+([\w]+)[ \t]+\(HWREG[\d]+\((0x[0-9A-F]+)\)\)", RegexOptions.Singleline);
-        private static readonly Regex IGNORE_LINE = new Regex(@"(\/\/)|(\/\*)|([ \t]*)|(\n\r)", RegexOptions.Singleline);
-        private static readonly Regex REGISTER_SET_ADDRESS = new Regex(@"[ \t]*#define[ \t]+([\w]+)_BASE[ \t]+\((0x[0-9A-F]+)\)", RegexOptions.Singleline);
-        private static readonly Regex KNOWN_VALUE = new Regex(@"[ \t]*#define[ \t]+([\w]+)__([\w]+)[ \t]*\((0x[0-9A-F]+)\)", RegexOptions.Singleline);
-
-        private readonly string _file;
-        private int _processedBits;
-        bool _duplicateRegisterDefinition;
-        Match _lastMatch;
-        Regex _matchedRegex;
-        private IDictionary<string, string> _registerNameToAddress;
-        private IDictionary<string, string> _registerSetToAddress;
-        private IDictionary<string, IList<KeyValuePair<string, ulong>>> _subRegistersKnownValues;
-        private List<HardwareRegister> _registers;
-        private List<HardwareRegisterSet> _registerSets;
-        private List<HardwareSubRegister> _subRegisters;
-        private List<string> _registersWithWrongBitsSum;
-        private HardwareRegisterSet _registerSet;
-        private HardwareRegister _register;
-        private HardwareSubRegister _subRegister;
-        private IDictionary<string, HardwareSubRegister> _registerBits;
-        private List<Regex> _expectedMatches;
-
-        public RegistersParser(string file)
+        private static string[] FILES_WITHOUT_REGISTERS = new string[]
         {
-            _file = file;
+            /*"hw_adi_0_rf.h",*/ "hw_ints.h", "hw_types.h",
+            /*"hw_adi_1_synth.h",*/ "hw_adi_2_refsys.h", "hw_adi_3_refsys.h", "hw_adi_4_aux.h",
+            "hw_aon_batmon.h", "hw_aon_event.h", "hw_aon_ioc.h", "hw_aon_rtc.h", "hw_aon_sysctl.h", "hw_aon_wuc.h",
+            "hw_aux_aiodio.h", "hw_aux_anaif.h", "hw_aux_evctl.h", "hw_aux_sce.h", "hw_aux_smph.h", "hw_aux_tdc.h", "hw_aux_timer.h", "hw_aux_wuc.h",
+            "hw_ccfg.h", "hw_ccfg_simple_struct.h", "hw_chip_def.h",
+            "hw_cpu_dwt.h", "hw_cpu_fpb.h", "hw_cpu_itm.h", "hw_cpu_rom_table.h", "hw_cpu_scs.h", "hw_cpu_tiprop.h", "hw_cpu_tpiu.h",
+            "hw_ddi_0_osc.h", "hw_device.h", "hw_event.h", "hw_fcfg1.h", "hw_flash.h", 
+        };
+        private static string[] REGISTERS_WITHOUT_SUBREGISTERS = new string[] {
+            "FLASH_FMPRE0", "FLASH_FMPRE1", "FLASH_FMPRE2", "FLASH_FMPRE3", "FLASH_FMPRE4", "FLASH_FMPRE5", "FLASH_FMPRE6", "FLASH_FMPRE7",
+            "FLASH_FMPPE0", "FLASH_FMPPE1", "FLASH_FMPPE2", "FLASH_FMPPE3", "FLASH_FMPPE4", "FLASH_FMPPE5", "FLASH_FMPPE6", "FLASH_FMPPE7",
+            "GPIO_DATA", "GPIO_DIR", "GPIO_IS", "GPIO_IBE", "GPIO_IEV", "GPIO_AFSEL", "GPIO_DR2R", "GPIO_DR4R", "GPIO_DR8R", "GPIO_ODR", "GPIO_PUR", "GPIO_PDR", "GPIO_SLR", "GPIO_DEN", "GPIO_CR", "GPIO_AMSEL", "GPIO_PCTL", "GPIO_ADCCTL", "GPIO_DMACTL"
+        };
+        private static string[] ADDRESSESWITHOUTTYPES = new string[] { "SRAM", "WATCHDOG", "GPIO_PORT_AHB", "ONEWIRE", "FLASH_CTRL", "ITM", "DWT", "FPB", "TPIU" };
+
+        private static Dictionary<string, string> TYPENAMEMAP = new Dictionary<string, string> { { "GPIO_PORT", "GPIO" }, { "WTIMER", "WDT" } };
+
+        public static string[] FindRelevantHeaderFiles(string headerDir)
+        {
+            return Directory.GetFiles(headerDir, "hw_*.h", SearchOption.AllDirectories).Where((fn) => (Path.GetFileName(fn) != "hw_memmap.h")).ToArray();
         }
 
-        public HardwareRegisterSet[] Parse()
+        public static HardwareRegisterSet[] GenerateFamilyPeripheralRegisters(string addressesFile, string[] headerFiles)
         {
-            OnStart();
+            Dictionary<string, KeyValuePair<string, ulong>> addresses = ProcessRegisterSetAddresses(addressesFile);//set name , (set type name, address)
+            Dictionary<string, HardwareRegisterSet> types = new Dictionary<string, HardwareRegisterSet>();
+            Dictionary<string, List<HardwareSubRegister>> subregs = new Dictionary<string, List<HardwareSubRegister>>();
 
-            foreach (var line in File.ReadLines(_file))
+            // The following are used just for testing that everything parsed is used
+            List<string> used_types = new List<string>();
+            List<string> used_subregs = new List<string>();
+
+            foreach (var header in headerFiles)
             {
-                _matchedRegex = null;
-                _lastMatch = Match.Empty;
+                ProcessRegisterSetTypes(header, ref types);
+                ProcessSubregisters(header, ref subregs);
+            }
 
-                CheckForMatches(line);
-
-                if (MissmatchHandled(line))
-                {
+            List<HardwareRegisterSet> sets = new List<HardwareRegisterSet>();
+            foreach (var set_name in addresses.Keys)
+            {
+                string type = addresses[set_name].Key;
+                if (TYPENAMEMAP.ContainsKey(type))
+                    type = TYPENAMEMAP[type];
+                else if (ADDRESSESWITHOUTTYPES.Contains(type))
                     continue;
+
+                List<HardwareRegister> registers = new List<HardwareRegister>(DeepCopy(types[type]).Registers);
+                used_types.Add(type);
+
+                for (int i = 0; i < registers.Count; i++)
+                {
+                    var register = registers[i];
+                    string hex_offset = register.Address;
+                    if (!string.IsNullOrEmpty(hex_offset))
+                    {
+                        ulong offset = ParseHex(hex_offset);
+                        hex_offset = register.Address = FormatToHex((addresses[set_name].Value + offset));
+                    }
+                    else
+                        throw new Exception("Register address not specified!");
+
+                    // Add the subregisters
+                    string subreg_key = type + "_" + register.Name;
+                    if (subregs.ContainsKey(subreg_key))
+                    {
+                        register.SubRegisters = subregs[subreg_key].ToArray();
+                        used_subregs.Add(subreg_key);
+                    }
+                    else if (!REGISTERS_WITHOUT_SUBREGISTERS.Contains(subreg_key))
+                        throw new Exception("Subregisters not found!");
                 }
 
-                if (_matchedRegex == REGISTER_SET_ADDRESS)
+                sets.Add(new HardwareRegisterSet
                 {
-                    OnRegisterSetAddress();
-                }
-                else if (_matchedRegex == REGISTER_ADDRESS)
-                {
-                    OnRegisterAddress();
-                }
-                else if (_matchedRegex == REGISTER_SET_BEGIN)
-                {
-                    OnRegisterSetBegin();
-                }
-                else if (_matchedRegex == REGISTER_BEGIN)
-                {
-                    OnRegisterBegin();
-                }
-                else if (_matchedRegex == REGISTER_DEFINITION)
-                {
-                    OnRegisterDefinition();
-                }
-                else if (_matchedRegex == SUBREGISTERS_BEGIN)
-                {
-                    OnSubRegistersBegin();
-                }
-                else if (_matchedRegex == SUBREGISTER_DEFINITION)
-                {
-                    SubRegisterDefinition();
-                }
-                else if (_matchedRegex == SUBREGISTERS_END)
-                {
-                    OnSubRegistersEnd();
-                }
-                else if (_matchedRegex == REGISTER_END)
-                {
-                    OnRegisterEnd();
-                }
-                else if (_matchedRegex == RESERVED_BITS)
-                {
-                    OnReservedBits();
-                }
-                else if (_matchedRegex == REGISTER_WITHOUT_SUBREGISTERS)
-                {
-                    OnRegisterWithoutSubregisters();
-                }
-                else if (_matchedRegex == REGISTER_SET_END)
-                {
-                    OnRegisterSetEnd();
-                }
-                else if (_matchedRegex == KNOWN_VALUE)
-                {
-                    OnKnownValue();
-                }
+                    UserFriendlyName = set_name,
+                    ExpressionPrefix = set_name + "->",
+                    Registers = registers.ToArray()
+                });
             }
 
-            ProcessKnownValues();
+            //Sort the hardware register sets alphabetically
+            sets.Sort((x, y) => { return x.UserFriendlyName.CompareTo(y.UserFriendlyName); });
 
-            _registerSets.Sort((x, y) => { return x.UserFriendlyName.CompareTo(y.UserFriendlyName); });
+            // Check that everything parsed was used
+            used_types = new List<string>(used_types.Distinct());
+            used_subregs = new List<string>(used_subregs.Distinct());
+            if (used_types.Count != types.Count)
+            {
+                List<string> unused_types = new List<string>(types.Keys.Except(used_types));
+            }
+            if (used_subregs.Count != subregs.Count)
+            {
+                List<string> unused_subregs = new List<string>(subregs.Keys.Except(used_subregs));
+            }
 
-            return _registerSets.ToArray();
+            return sets.ToArray();
         }
 
-        private void ProcessKnownValues()
+        private static Dictionary<string, KeyValuePair<string, ulong>> ProcessRegisterSetAddresses(string file)
         {
-            foreach (var knownValues in _subRegistersKnownValues)
+            Dictionary<string, KeyValuePair<string, ulong>> addresses = new Dictionary<string, KeyValuePair<string, ulong>>();
+            Regex basedef_regex = new Regex(@"^#define[ \t]+((GPIO_PORT)[A-Z]|(GPIO_PORT)[A-Z](_AHB)|SHAMD5|([A-Z0-9_]+?)[0-9]?)_BASE[ \t]+0x([0-9xa-fA-F]{8})[ \t]+\/\/ (.*?)[\r]?$", RegexOptions.Multiline);
+
+            foreach (Match m in basedef_regex.Matches(File.ReadAllText(file)))
             {
-                if (!_registerBits.ContainsKey(knownValues.Key))
-                {
-                    continue;
-                }
+                string name = m.Groups[1].ToString();
+                string type = m.Groups[2].ToString();
+                if (type == "")
+                    type = m.Groups[3].ToString() + m.Groups[4].ToString();
+                if (type == "")
+                    type = m.Groups[5].ToString();
+                if (type == "")
+                    type = name;
+                ulong address = ulong.Parse(m.Groups[6].ToString(), System.Globalization.NumberStyles.HexNumber);
+                string comment = m.Groups[7].ToString();
 
-                var knownSubRegValues = new List<KnownSubRegisterValue>();
-                var subReg = _registerBits[knownValues.Key];
-                ulong numOfValues = (ulong)1 << subReg.SizeInBits;
-                ulong valueMask = (numOfValues - 1) << subReg.FirstBit;
-
-                for (ulong i = 0; i < numOfValues; ++i)
-                {
-                    knownSubRegValues.Add(new KnownSubRegisterValue { Name = "Unknown (" + FormatToHex(i, subReg.SizeInBits) + ")" });
-                }
-
-                foreach (var knownValue in knownValues.Value)
-                {
-                    if ((knownValue.Value & ~valueMask) != 0)
-                    {
-                        throw new Exception("Know value outside of subregister's values range");
-                    }
-
-                    knownSubRegValues[(int)(knownValue.Value >> subReg.FirstBit)] = new KnownSubRegisterValue { Name = knownValue.Key };
-                }
-
-                subReg.KnownValues = knownSubRegValues.ToArray();
+                addresses.Add(name, new KeyValuePair<string, ulong>(type, address));
             }
+
+            return addresses;
         }
 
-        private void OnKnownValue()
+        private static void ProcessRegisterSetTypes(string file, ref Dictionary<string, HardwareRegisterSet> types)
         {
-            var knownValueKey = _lastMatch.Groups[1].Value;
-            var knownValueName = _lastMatch.Groups[2].Value;
-            var knownValueValue = _lastMatch.Groups[3].Value;
-
-            if (!_subRegistersKnownValues.ContainsKey(knownValueKey))
+            Regex type_regex = new Regex(@"\/\/[ \t]+The following are defines for the ([A-Za-z0-9_\/ ]+) register[ \n\r\/]+(offsets|addresses).[^#]+([^\*]+)\/\/\*", RegexOptions.Singleline);
+            Regex type_regex1 = new Regex(@"\/\/[ \t]+This section defines the register offsets of[ \n\r\/]+([A-Za-z0-9_\/ ]+) (component).[^#]+([^\*]+)\/\/\*", RegexOptions.Singleline);
+            var type_m = type_regex.Matches(File.ReadAllText(file));
+            if (type_m.Count == 0)
             {
-                _subRegistersKnownValues.Add(knownValueKey, new List<KeyValuePair<string, UInt64>>());
+                type_m = type_regex1.Matches(File.ReadAllText(file));
             }
 
-            _subRegistersKnownValues[knownValueKey].Add(new KeyValuePair<string, UInt64>(knownValueName, Convert.ToUInt64(knownValueValue, 16)));
-            SetExpectedMatches(KNOWN_VALUE);
-        }
-
-        private void OnRegisterSetEnd()
-        {
-            _registerSet.UserFriendlyName = _lastMatch.Groups[1].Value;
-            _registerSet.ExpressionPrefix = _registerSet.UserFriendlyName + "->";
-
-            if (_registersWithWrongBitsSum.Count > 0)
+            foreach (Match m in type_m)
             {
-                foreach (var registerName in _registersWithWrongBitsSum)
+                string type_name = m.Groups[1].ToString();
+                string type_regs = m.Groups[3].ToString();
+
+                Regex reg_regex = new Regex("#define (" + type_name + @"|[A-Z0-9_]+?)(_O)?_([A-Z0-9_]+)[ \t]+(0x[0-9A-Fa-f]{8})[ \t\/]*([^\n\r]*)([\r\n \t]*[\/\/ ]{0,3}[^\n\r#]*)+[\n\r]*", RegexOptions.Singleline);
+
+                List<HardwareRegister> regs = new List<HardwareRegister>();
+                int index = 0; // This is for checking only, ensuring that all the registers where processed
+                foreach (Match m2 in reg_regex.Matches(type_regs))
                 {
-                    if (!REGISTERS_WITH_WRONG_BITS_SUM.Contains(_registerSet.ExpressionPrefix + registerName))
+                    if (index != m2.Index)
+                        throw new Exception("Potentially missed parsing a register!");
+                    string type_name2 = m2.Groups[1].ToString();
+                    if (type_name != type_name2)
+                        type_name = type_name2;
+                    string reg_name = m2.Groups[3].ToString();
+                    string reg_addr = m2.Groups[4].ToString();
+                    string comment = m2.Groups[5].ToString();
+                    for (int i = 0; i < m2.Groups[6].Captures.Count; i++)
                     {
-                        throw new Exception("Sum of bits less than size of the register " + _register.Name);
+                        string cont_comment = m2.Groups[6].Captures[i].ToString();
+                        if (cont_comment.Trim() != "")
+                            comment += " " + cont_comment.Trim().Substring(2).Trim();
                     }
-                }
-            }
 
-            _registersWithWrongBitsSum.Clear();
-            _registerSet.Registers = new HardwareRegister[_registers.Count];
+                    regs.Add(new HardwareRegister { Name = reg_name, Address = reg_addr, SizeInBits = REGISTER_LENGTH_IN_BITS });
 
-            for (int i = 0; i < _registers.Count; ++i)
-            {
-                var currentRegister = _registers[i];
-
-                if (currentRegister.SubRegisters != null)
-                {
-                    foreach (var subReg in currentRegister.SubRegisters)
-                    {
-                        var subRegKey = _registerSet.UserFriendlyName + subReg.Name;
-                        if (!_registerBits.ContainsKey(subRegKey))
-                        {
-                            _registerBits.Add(subRegKey, subReg);
-                        }
-                    }
+                    index += m2.Length;
                 }
 
-                var regAddressKey = _registerSet.UserFriendlyName + currentRegister.Name;
-                string registerAddress;
-                if (_registerNameToAddress.TryGetValue(regAddressKey, out registerAddress))
+                if (regs.Count == 0)
                 {
-                    currentRegister.Address = registerAddress;
+                    if (!FILES_WITHOUT_REGISTERS.Contains(Path.GetFileName(file)))
+                        throw new Exception("No registers found for set!");
                 }
                 else
+                    types.Add(type_name, new HardwareRegisterSet { UserFriendlyName = type_name, Registers = regs.ToArray() });
+            }
+        }
+
+        private static void ProcessSubregisters(string file, ref Dictionary<string, List<HardwareSubRegister>> subregs)
+        {
+            Regex reg_regex = new Regex(@"\/\/[ \t]+The following are defines for the bit fields in the ([A-Z0-9_]+)[ \n\r\/]+register.[ \n\r\/]+\/\/[\*]+\r\n(.+?)(\/\/\*|#endif)", RegexOptions.Singleline);
+            var reg_m = reg_regex.Matches(File.ReadAllText(file));
+
+            foreach (Match m in reg_m)
+            {
+                string reg_name = m.Groups[1].ToString().Replace("_O_", "_");
+                string reg_subregs = m.Groups[2].ToString().Trim();
+
+                Regex subreg_regex = new Regex("#define " + reg_name + @"_([A-Z0-9_]+)[ \t\n\r\\]+(0x)?([0-9A-Fa-f]{8}|[0-9]+)[ \t\/]*([^\n\r]*)([\r\n \t]*[\/\/ ]{0,3}[^\n\r#]*)+[\n\r]*", RegexOptions.Singleline);
+
+                List<HardwareSubRegister> subs = new List<HardwareSubRegister>();
+                List<KnownSubRegisterValue> known_values = null;
+                ulong last_subreg_mask = 0;
+                int index = 0; // This is for checking only, ensuring that all the registers where processed
+                foreach (Match m2 in subreg_regex.Matches(reg_subregs))
                 {
-                    if (i == 0)
+                    if (index != m2.Index)
+                        throw new Exception("Potentially missed parsing a register!");
+                    string subreg_name = m2.Groups[1].ToString();
+                    if (subreg_name.EndsWith("_M"))
+                        subreg_name = subreg_name.Substring(0, subreg_name.Length - 2);
+                    else if (subreg_name == "M")
+                        subreg_name = reg_name;
+                    else if (subreg_name.EndsWith("_S") || (subreg_name == "S"))
                     {
-                        currentRegister.Address = _registerSetToAddress[_registerSet.UserFriendlyName];
+                        index += m2.Length;
+                        continue;
+                    }
+                    ulong subreg_mask = ulong.Parse(m2.Groups[3].ToString(), System.Globalization.NumberStyles.HexNumber);
+                    string comment = m2.Groups[4].ToString();
+                    for (int i = 0; i < m2.Groups[5].Captures.Count; i++)
+                    {
+                        string cont_comment = m2.Groups[5].Captures[i].ToString();
+                        if (cont_comment.Trim() != "")
+                            comment += " " + cont_comment.Trim().Substring(2).Trim();
+                    }
+
+                    if ((known_values == null) || ((last_subreg_mask | subreg_mask) != last_subreg_mask))
+                    {
+                        // If there are previous known_values gathered, save it to the previous subregister
+                        if ((known_values != null) && (known_values.Count > 0) && (subs.Last().SizeInBits <= 4))
+                            subs[subs.Count - 1].KnownValues = known_values.ToArray();
+                        known_values = new List<KnownSubRegisterValue>();
+
+                        int size, first_bit;
+                        ExtractFirstBitAndSize(subreg_mask, out size, out first_bit, false);
+                        subs.Add(new HardwareSubRegister { Name = subreg_name, FirstBit = first_bit, SizeInBits = size });
+                        last_subreg_mask = subreg_mask;
+                    }
+                    else if (subs.Last().SizeInBits <= 4)//Must be a known value instead of a new subregister
+                    {
+                        for (ulong i = (ulong)known_values.Count; i < (subreg_mask >> subs.Last().FirstBit); i++)
+                        {
+                            known_values.Add(new KnownSubRegisterValue { Name = "Unknown (" + FormatToHex(i, subs.Last().SizeInBits) + ")" });
+                        }
+                        known_values.Add(new KnownSubRegisterValue { Name = CleanKnownSubregisterValue(subreg_name, subs.Last().Name) });
                     }
                     else
                     {
-                        var previousRegister = _registers[i - 1];
-                        var calculatedAddress = Convert.ToUInt64(previousRegister.Address, 16) + (UInt32)(previousRegister.SizeInBits / 8);
-                        currentRegister.Address = string.Format("0x{0:x}", calculatedAddress);
-                    }
-                }
-
-                if (i > 0)
-                {
-                    var previousRegister = _registers[i - 1];
-                    var calculatedAddress = Convert.ToUInt64(previousRegister.Address, 16) + (UInt32)(previousRegister.SizeInBits / 8);
-                    if (Convert.ToUInt64(currentRegister.Address, 16) != calculatedAddress)
-                    {
-                        throw new Exception("Wrong register address");
-                    }
-                }
-
-                _registerNameToAddress.Remove(regAddressKey);
-                _registerSet.Registers[i] = _registers[i];
-            }
-
-            _registerSets.Add(_registerSet);
-            SetExpectedMatches(REGISTER_SET_BEGIN, KNOWN_VALUE);
-        }
-
-        private void OnRegisterWithoutSubregisters()
-        {
-            _register = new HardwareRegister();
-            _register.Name = _lastMatch.Groups[3].Value;
-            _register.ReadOnly = IsReadOnly(_lastMatch.Groups[1].Value);
-            _register.SizeInBits = int.Parse(_lastMatch.Groups[2].Value);
-            _registers.Add(_register);
-            SetExpectedMatches(REGISTER_WITHOUT_SUBREGISTERS, REGISTER_BEGIN, REGISTER_SET_END, RESERVED_BITS);
-        }
-
-        private void OnReservedBits()
-        {
-            var arraySize = int.Parse(_lastMatch.Groups[4].Value);
-            var arrayName = _lastMatch.Groups[3].Value;
-            var isReadOnly = IsReadOnly(_lastMatch.Groups[1].Value);
-
-            for (int i = 0; i < arraySize; i++)
-            {
-                var register = new HardwareRegister
-                {
-                    Name = arrayName + "_" + i.ToString(),
-                    ReadOnly = isReadOnly,
-                    SizeInBits = int.Parse(_lastMatch.Groups[2].Value)
-                };
-
-                _registers.Add(register);
-            }
-
-            SetExpectedMatches(REGISTER_WITHOUT_SUBREGISTERS, REGISTER_BEGIN, REGISTER_SET_END, RESERVED_BITS);
-        }
-
-        private void OnRegisterEnd()
-        {
-            _register.Name = _lastMatch.Groups[1].Value;
-
-            if (_processedBits != _register.SizeInBits)
-            {
-                if (_processedBits > _register.SizeInBits)
-                {
-                    throw new Exception("Sum of bits more than size of the register " + _register.Name);
-                }
-
-                _registersWithWrongBitsSum.Add(_register.Name);
-            }
-
-            _register.SubRegisters = _subRegisters.ToArray();
-            _registers.Add(_register);
-            SetExpectedMatches(REGISTER_WITHOUT_SUBREGISTERS, REGISTER_BEGIN, REGISTER_SET_END, RESERVED_BITS);
-        }
-
-        private void OnSubRegistersEnd()
-        {
-            if (_lastMatch.Groups[1].Value != "b")
-            {
-                throw new Exception("Possibly a wrong or duplicate list of subregisters");
-            }
-
-            SetExpectedMatches(REGISTER_END);
-        }
-
-        private void SubRegisterDefinition()
-        {
-            _subRegister = new HardwareSubRegister();
-            _subRegister.Name = _lastMatch.Groups[3].Value;
-            _subRegister.FirstBit = _processedBits;
-            _subRegister.SizeInBits = int.Parse(_lastMatch.Groups[4].Value);
-
-            if (_subRegister.Name == string.Empty)
-            {
-                _subRegister.Name = string.Format("Unknown (0x{0:x})", _subRegister.FirstBit);
-            }
-
-            _subRegisters.Add(_subRegister);
-            _processedBits += _subRegister.SizeInBits;
-            SetExpectedMatches(SUBREGISTER_DEFINITION, SUBREGISTERS_END);
-        }
-
-        private void OnSubRegistersBegin()
-        {
-            _subRegisters = new List<HardwareSubRegister>();
-            SetExpectedMatches(SUBREGISTER_DEFINITION);
-        }
-
-        private void OnRegisterDefinition()
-        {
-            _register.ReadOnly = IsReadOnly(_lastMatch.Groups[1].Value);
-            _register.SizeInBits = int.Parse(_lastMatch.Groups[2].Value);
-            _processedBits = 0;
-            SetExpectedMatches(SUBREGISTERS_BEGIN);
-        }
-
-        private void OnRegisterBegin()
-        {
-            _duplicateRegisterDefinition = false;
-            _register = new HardwareRegister();
-            SetExpectedMatches(REGISTER_DEFINITION);
-        }
-
-        private void OnRegisterSetBegin()
-        {
-            _registers = new List<HardwareRegister>();
-            _registerSet = new HardwareRegisterSet();
-            SetExpectedMatches(REGISTER_BEGIN, RESERVED_BITS, REGISTER_WITHOUT_SUBREGISTERS);
-        }
-
-        private void OnRegisterAddress()
-        {
-            _registerNameToAddress.Add(_lastMatch.Groups[1].Value, _lastMatch.Groups[2].Value);
-            SetExpectedMatches(REGISTER_ADDRESS, REGISTER_SET_BEGIN);
-        }
-
-        private void OnRegisterSetAddress()
-        {
-            _registerSetToAddress.Add(_lastMatch.Groups[1].Value, _lastMatch.Groups[2].Value);
-            SetExpectedMatches(REGISTER_SET_ADDRESS, REGISTER_ADDRESS);
-        }
-
-        private void CheckForMatches(string line)
-        {
-            foreach (var expectedMatch in _expectedMatches)
-            {
-                _lastMatch = expectedMatch.Match(line);
-                if (_lastMatch.Success)
-                {
-                    _matchedRegex = expectedMatch;
-                    break;
-                }
-            }
-        }
-
-        private bool MissmatchHandled(string line)
-        {
-            if (!_lastMatch.Success)
-            {
-                if (_expectedMatches.Contains(REGISTER_END))
-                {
-                    if (_duplicateRegisterDefinition)
-                    {
-                        _lastMatch = SUBREGISTERS_END.Match(line);
-                        if (_lastMatch.Success)
-                        {
-                            if (_lastMatch.Groups[1].Value != "a")
-                            {
-                                throw new Exception("Possibly not a duplicate list of subregisters");
-                            }
-                        }
-
-                        return true;
+                        Console.WriteLine("Skipped: " + m2.ToString());
                     }
 
-                    _lastMatch = SUBREGISTERS_BEGIN.Match(line);
-                    if (_lastMatch.Success)
-                    {
-                        _duplicateRegisterDefinition = true;
-                        return true;
-                    }
-
+                    index += m2.Length;
                 }
 
-                // outside of type definitions
-                if (_expectedMatches.Contains(REGISTER_SET_ADDRESS) ||
-                    _expectedMatches.Contains(REGISTER_ADDRESS) ||
-                    _expectedMatches.Contains(REGISTER_SET_BEGIN) ||
-                    _expectedMatches.Contains(KNOWN_VALUE))
-                {
-                    return true;
-                }
+                if (index != reg_subregs.Length)
+                    throw new Exception("Potentially missed parsing a register!");
 
-                throw new Exception("Failed to parse the line");
+                if (subs.Count == 0)
+                    throw new Exception("No subregisters found for register!");
+
+                // Clean the subregisters: remove 32-bit subregisters, too sparse known values and repetitions
+                CleanSubregisters(ref subs);
+                if ((subs != null) && (subs.Count > 0))
+                    subregs.Add(reg_name, subs);
             }
 
-            // there was a match
-            return false;
+            if ((reg_m.Count == 0) && !FILES_WITHOUT_REGISTERS.Contains(Path.GetFileName(file)))
+                throw new Exception("No registers found!");
         }
 
-        private void OnStart()
+        class HardwareSubRegisterComparer : IEqualityComparer<HardwareSubRegister>
         {
-            _processedBits = 0;
-            _registerNameToAddress = new Dictionary<string, string>();
-            _registerSetToAddress = new Dictionary<string, string>();
-            _subRegistersKnownValues = new Dictionary<string, IList<KeyValuePair<string, ulong>>>();
-            _registers = new List<HardwareRegister>();
-            _registerSets = new List<HardwareRegisterSet>();
-            _subRegisters = new List<HardwareSubRegister>();
-            _registersWithWrongBitsSum = new List<string>();
-            _duplicateRegisterDefinition = false;
-            _lastMatch = Match.Empty;
-            _matchedRegex = null;
-            _registerSet = null;
-            _register = null;
-            _subRegister = null;
-            _registerBits = new Dictionary<string, HardwareSubRegister>();
-            _expectedMatches = new List<Regex> { REGISTER_SET_ADDRESS };
+            public bool Equals(HardwareSubRegister x, HardwareSubRegister y)
+            {
+                return x.Name.Equals(y.Name, StringComparison.InvariantCultureIgnoreCase) && (x.FirstBit == y.FirstBit) && (x.SizeInBits == y.SizeInBits);
+            }
+
+            public int GetHashCode(HardwareSubRegister obj)
+            {
+                return obj.Name.ToUpperInvariant().GetHashCode() ^ obj.FirstBit.GetHashCode() ^ obj.SizeInBits.GetHashCode();
+            }
         }
 
-        private static bool IsReadOnly(string definition)
+        private static void CleanSubregisters(ref List<HardwareSubRegister> subs)
         {
-            return definition.Trim() == "__I";
+            if ((subs != null) && (subs.Count > 1))
+            {
+                // Sort the subregisters based on first bit
+                subs.Sort((x, y) => { return (x.FirstBit - y.FirstBit); });
+
+                // Remove repetitions
+                var tmp = subs.Distinct(new HardwareSubRegisterComparer()).ToList();
+                if (subs.Count > tmp.Count)
+                    Console.WriteLine("Removed subregister repetitions!");
+                subs.Clear();
+                subs.AddRange(tmp);
+
+                // Check the subregisters for any overlap in ranges
+                int index = -1;
+                foreach (var subreg in subs)
+                {
+                    if (subreg.FirstBit < index)
+                        Console.WriteLine("Overlap in subregister ranges for subregister " + subreg.Name);
+                    index = subreg.FirstBit + subreg.SizeInBits;
+                }
+            }
+        }
+
+        private static string CleanKnownSubregisterValue(string raw_known_value, string subreg_name)
+        {
+            if (raw_known_value.StartsWith(subreg_name + "_"))
+                return raw_known_value.Substring(subreg_name.Length + 1);
+            return raw_known_value;
+        }
+
+        private static HardwareRegisterSet DeepCopy(HardwareRegisterSet set)
+        {
+            HardwareRegisterSet set_new = new HardwareRegisterSet
+            {
+                UserFriendlyName = set.UserFriendlyName,
+                ExpressionPrefix = set.ExpressionPrefix,
+            };
+
+            if (set.Registers != null)
+            {
+                set_new.Registers = new HardwareRegister[set.Registers.Length];
+                for (int i = 0; i < set.Registers.Length; i++)
+                {
+                    set_new.Registers[i] = DeepCopy(set.Registers[i]);
+                }
+            }
+
+            return set_new;
+        }
+
+        private static HardwareRegister DeepCopy(HardwareRegister reg)
+        {
+            HardwareRegister reg_new = new HardwareRegister
+            {
+                Name = reg.Name,
+                Address = reg.Address,
+                GDBExpression = reg.GDBExpression,
+                ReadOnly = reg.ReadOnly,
+                SizeInBits = reg.SizeInBits
+            };
+
+            if (reg.SubRegisters != null)
+            {
+                reg_new.SubRegisters = new HardwareSubRegister[reg.SubRegisters.Length];
+                for (int i = 0; i < reg.SubRegisters.Length; i++)
+                {
+                    reg_new.SubRegisters[i] = DeepCopy(reg.SubRegisters[i]);
+                }
+            }
+
+            return reg_new;
+        }
+
+        private static HardwareSubRegister DeepCopy(HardwareSubRegister subreg)
+        {
+            HardwareSubRegister subreg_new = new HardwareSubRegister
+            {
+                Name = subreg.Name,
+                FirstBit = subreg.FirstBit,
+                SizeInBits = subreg.SizeInBits,
+                KnownValues = (subreg.KnownValues != null) ? (KnownSubRegisterValue[])subreg.KnownValues.Clone() : null
+            };
+
+            return subreg_new;
+        }
+
+        private static ulong ParseHex(string hex)
+        {
+            if (hex.StartsWith("0x"))
+                hex = hex.Substring(2);
+            return ulong.Parse(hex, System.Globalization.NumberStyles.HexNumber);
         }
 
         private static string FormatToHex(ulong addr, int length = 32)
@@ -467,10 +384,45 @@ namespace cc26xx_bsp_generator
             return string.Format(format, (uint)addr);
         }
 
-        private void SetExpectedMatches(params Regex[] expectedMatches)
+        private static bool ExtractFirstBitAndSize(ulong val, out int size, out int firstBit, bool throwWhenSecondOneRegionExists = true)
         {
-            _expectedMatches.Clear();
-            _expectedMatches.AddRange(expectedMatches);
+            bool second_one_region = false;
+            size = 0;
+            firstBit = -1;
+            int lastBit = -1;
+            int state = 0;
+            for (int i = 0; i < 64; i++)
+            {
+                if ((val & ((ulong)1 << i)) == ((ulong)1 << i))
+                {
+                    if (state == 0)
+                        state = 1;
+                    else if (state == 2)
+                    {
+                        second_one_region = true;
+                        if (throwWhenSecondOneRegionExists)
+                            throw new Exception("Hit a second 1 region inside subregister bit mask!");
+                    }
+
+                    lastBit = i;
+                    if (firstBit < 0)
+                        firstBit = i;
+                }
+                else if (state == 1)
+                    state = 2;
+            }
+
+            if (lastBit >= 0)
+                size = lastBit - firstBit + 1;
+
+            if (size == 0 || firstBit == -1)
+            {
+                size = 1;
+                firstBit = 0;
+                throw new Exception("Extracting first bit or size for subregister failed!");
+            }
+
+            return second_one_region;
         }
     }
 }

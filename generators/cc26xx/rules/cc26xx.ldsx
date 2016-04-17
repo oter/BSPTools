@@ -4,19 +4,14 @@
   <SectionAlignment>4</SectionAlignment>
   <Sections>
 	<Section>
-		<Name>.isr_vector</Name>
+		<Name>.text</Name>
+		<Flags>DefineShortLabels Unaligned</Flags>
 		<TargetMemory>FLASH</TargetMemory>
 		<Inputs>
 			<SectionReference>
+				<NamePattern>.isr_vector</NamePattern>
 				<Flags>Keep</Flags>
 			</SectionReference>
-		</Inputs>
-	</Section>
-	<Section>
-		<Name>.text</Name>
-		<Flags>DefineShortLabels</Flags>
-		<TargetMemory>FLASH</TargetMemory>
-		<Inputs>
 			<SectionReference>
 				<Flags>AddPrefixForm</Flags>
 			</SectionReference>
@@ -36,24 +31,29 @@
 			</SectionReference>
 			<SectionReference>
 				<NamePattern>.fini</NamePattern>
+				<Flags>AddPrefixForm</Flags>
 				<Flags>Keep</Flags>
 			</SectionReference>
-		</Inputs>
-	</Section>
-	<Section>
-		<Name>.ARM.extab</Name>
-		<TargetMemory>FLASH</TargetMemory>
-		<Inputs>
-			<SectionReference><NamePattern>.ARM.extab</NamePattern></SectionReference>
-			<SectionReference><NamePattern>.gnu.linkonce.armextab.*</NamePattern></SectionReference>
+			<SectionReference>
+				<NamePattern>.eh_frame*</NamePattern>
+			</SectionReference>
 		</Inputs>
 	</Section>
 	<Section>
 		<Name>.exidx</Name>
 		<TargetMemory>FLASH</TargetMemory>
-		<Flags>ProvideLongLabelsLeadingUnderscores</Flags>
+		<Flags>ProvideLongLabelsLeadingUnderscores Unaligned</Flags>
 		<Inputs>
-			<SectionReference><NamePattern>.ARM.exidx*</NamePattern></SectionReference>
+			<SectionReference><NamePattern>.ARM.exidx* .gnu.linkonce.armexidx.*</NamePattern></SectionReference>
+		</Inputs>
+	</Section>
+
+	<Section>
+		<Name>.ARM.extab</Name>
+		<TargetMemory>FLASH</TargetMemory>
+		<Flags>Unaligned</Flags>
+		<Inputs>
+			<SectionReference><NamePattern>.ARM.extab* .gnu.linkonce.armextab.*</NamePattern></SectionReference>
 		</Inputs>
 	</Section>
 	<Section>
@@ -94,17 +94,21 @@
 	</Section>
 	<Section>
 		<Name>.data</Name>
-		<Flags>DefineShortLabels ProvideLongLabels InitializerInMainMemory</Flags>
+		<Flags>DefineShortLabels ProvideLongLabels Unaligned</Flags>
 		<TargetMemory>SRAM</TargetMemory>
 		<Inputs>
 			<SectionReference>
+				<NamePattern>.vtable</NamePattern>
+			</SectionReference>
+			<SectionReference>
+				<NamePattern>.data</NamePattern>
 				<Flags>AddPrefixForm</Flags>
 			</SectionReference>
 		</Inputs>
 	</Section>
 	<Section>
 		<Name>.bss</Name>
-		<Flags>DefineShortLabels ProvideLongLabels</Flags>
+		<Flags>DefineShortLabels ProvideLongLabels Unaligned</Flags>
 		<TargetMemory>SRAM</TargetMemory>
 		<Inputs>
 			<SectionReference>
@@ -114,6 +118,16 @@
 				<NamePattern>COMMON</NamePattern>
 			</SectionReference>
 		</Inputs>
+	</Section>
+	<Section>
+		<Name>.ccfg</Name>
+		<TargetMemory>FLASH_CCFG</TargetMemory>
+		<Flags>Unaligned</Flags>
+	</Section>
+	<Section>
+		<Name>.gpram</Name>
+		<TargetMemory>FLASH_CCFG</TargetMemory>
+		<Flags>Unaligned</Flags>
 	</Section>
   </Sections>
 </LinkerScriptTemplate>

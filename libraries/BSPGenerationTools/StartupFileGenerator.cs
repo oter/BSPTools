@@ -97,6 +97,7 @@ namespace BSPGenerationTools
             public Predicate<MCUBuilder> MatchPredicate;
             public string FileName;
             public InterruptVector[] Vectors;
+            public string StartupFileTemplatePath = "StartupFileTemplate.c";
 
             public string[] AdditionalResetHandlerLines;
 
@@ -116,12 +117,10 @@ namespace BSPGenerationTools
                 Directory.CreateDirectory(Path.GetDirectoryName(fn));
                 using (var sw = File.CreateText(fn))
                 {
-                    // Reset handler in CC26xx MCU's family differ from other MCUs, so
-                    // workaround added
-                    if (Vectors[0].Name != "_estack" || (Vectors[1].Name != "Reset_Handler" && Vectors[1].Name != "ResetISR"))
+                    if (Vectors[0].Name != "_estack" || Vectors[1].Name != "Reset_Handler")
                         throw new Exception("Unexpected vector table layout");
 
-                    var templateLines = File.ReadAllLines("StartupFileTemplate.c");
+                    var templateLines = File.ReadAllLines(StartupFileTemplatePath);
                     for (int l = 0; l < templateLines.Length; l++ )
                     {
                         var line = templateLines[l];

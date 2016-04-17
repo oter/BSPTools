@@ -53,7 +53,7 @@ namespace cc26xx_bsp_generator
             {
                 exampleDirs.Add(sample);
             }
-
+            
             bool noPeripheralRegisters = args.Contains("/noperiph");
             var familyDefinitions = new List<MCUFamily>();
             var mcuDefinitions = new List<MCU>();
@@ -71,59 +71,23 @@ namespace cc26xx_bsp_generator
                     }
                 }
 
-
                 mcuFamilyBuilder.AttachStartupFiles(new[]
                 {
                     StartupFilesParser.Parse(
                         mcuFamilyBuilder.Definition.Name,
                         mcuFamilyBuilder.Definition.PrimaryHeaderDir,
-                        "startup_gcc.c")
+                        "startup_gcc.c",
+                        bspBuilder.SystemVars)
                  });
 
-                //if (!noPeripheralRegisters)
-                //{
-                //    var headerFiles = Directory.GetFiles(mcuFamilyBuilder.Definition.PrimaryHeaderDir + "\\inc", "*.h");
-                //    var headerFileRegex = new Regex(mcuFamilyBuilder.Definition.DeviceRegex, RegexOptions.IgnoreCase);
-                //    var familyHeaderFiles = headerFiles.Where(headerFile =>
-                //        headerFileRegex.Match(headerFile.Substring(headerFile.LastIndexOf("\\") + 1)).Success).ToArray();
-
-                //    if (familyHeaderFiles.Length == 0)
-                //    {
-                //        throw new Exception("No header file found for MCU family");
-                //    }
-                //    else if (familyHeaderFiles.Length > 1)
-                //    {
-                //        throw new Exception("Only one header file expected for MCU family");
-                //    }
-
-                //    var registersParser = new RegistersParser(familyHeaderFiles[0]);
-
-                var registers = new List<HardwareRegister> { };
-                registers.Add(new HardwareRegister
-                {
-                    Address = "0x400220B0",
-                    GDBExpression = null,
-                    Name = "DOUTTGL31_0",
-                    ReadOnly = false,
-                    SizeInBits = 32,
-                    SubRegisters = null
-                });
-
-                var temporaryRegisters = new List<HardwareRegisterSet> { };
-                temporaryRegisters.Add(new HardwareRegisterSet
-                {
-                    ExpressionPrefix = "GPIO",
-                    UserFriendlyName = "GPIO",
-                    Registers = registers.ToArray()
-
-                });
+                HardwareRegisterSet[] regs = RegistersParserXml.GenerateFamilyPeripheralRegisters(@"..\..\registers", Path.Combine(mcuFamilyBuilder.Definition.PrimaryHeaderDir, @"inc\hw_memmap.h"));
 
                 mcuFamilyBuilder.AttachPeripheralRegisters(new[]
                 {
                     new MCUDefinitionWithPredicate
                     {
                         MCUName = mcuFamilyBuilder.Definition.Name,
-                        RegisterSets = temporaryRegisters.ToArray(),
+                        RegisterSets = regs.ToArray(),
                         MatchPredicate = m => true
                     }
                 });
@@ -174,18 +138,25 @@ namespace cc26xx_bsp_generator
 
         class Cc26xxBuilder : BSPBuilder
         {
-            const uint FLASHBase = 0x00000000, SRAMBase = 0x20000000;
+            const uint FLASH_Base       = 0x00000000; 
+            const uint FLASH_Size       = 0x0001FFA8;
+            const uint FLASH_CCFG_Base  = 0x0001FFA8;
+            const uint FLASH_CCFG_Size  = 0x00000058;
+            const uint SRAM_Base        = 0x20000000;
+            const uint SRAM_Size        = 0x00005000;
+            const uint GPRAM_Base       = 0x11000000;
+            const uint GPRAM_Size       = 0x00002000;
 
             public Cc26xxBuilder(BSPDirectories dirs)
-                : base(dirs)
+                : base(dirs, @"..\..\rules\cc26xx.ldsx")
             {
                 ShortName = "cc26xx";
             }
 
             public override void GetMemoryBases(out uint flashBase, out uint ramBase)
             {
-                flashBase = FLASHBase;
-                ramBase = SRAMBase;
+                flashBase = FLASH_Base;
+                ramBase = SRAM_Base;
             }
 
             public override MemoryLayout GetMemoryLayout(MCUBuilder mcu, MCUFamilyBuilder family)
@@ -195,19 +166,37 @@ namespace cc26xx_bsp_generator
                 layout.Memories.Add(new Memory
                 {
                     Name = "FLASH",
-                    Access = MemoryAccess.Undefined,
+                    Access = MemoryAccess.Readable | MemoryAccess.Executable,
                     Type = MemoryType.FLASH,
-                    Start = FLASHBase,
-                    Size = (uint)mcu.FlashSize
+                    Start = FLASH_Base,
+                    Size = FLASH_Size
+                });
+
+                layout.Memories.Add(new Memory
+                {
+                    Name = "FLASH_CCFG",
+                    Access = MemoryAccess.Readable | MemoryAccess.Executable,
+                    Type = MemoryType.FLASH,
+                    Start = FLASH_CCFG_Base,
+                    Size = FLASH_CCFG_Size
                 });
 
                 layout.Memories.Add(new Memory
                 {
                     Name = "SRAM",
-                    Access = MemoryAccess.Undefined,
+                    Access = MemoryAccess.Readable | MemoryAccess.Writable | MemoryAccess.Executable,
                     Type = MemoryType.RAM,
-                    Start = SRAMBase,
-                    Size = (uint)mcu.RAMSize
+                    Start = SRAM_Base,
+                    Size = SRAM_Size
+                });
+
+                layout.Memories.Add(new Memory
+                {
+                    Name = "GPRAM",
+                    Access = MemoryAccess.Readable | MemoryAccess.Writable | MemoryAccess.Executable,
+                    Type = MemoryType.RAM,
+                    Start = GPRAM_Base,
+                    Size = GPRAM_Size
                 });
 
                 return layout;

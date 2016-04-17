@@ -2,11 +2,11 @@
 <FamilyDefinition xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
 	<CoreFramework>
 		<CopyJobs>	
-<!-- 			<CopyJob>
+			<CopyJob>
 				<SourceFolder>$$BSPGEN:RULES_DIR$$\SystemInit</SourceFolder>
 				<FilesToCopy>*</FilesToCopy>
 				<ProjectInclusionMask>*</ProjectInclusionMask>
-			</CopyJob> -->
+			</CopyJob>
 			<CopyJob>
 				<SourceFolder>$$BSPGEN:INPUT_DIR$$\inc</SourceFolder>
 				<TargetFolder>SDK\inc</TargetFolder>
@@ -23,7 +23,7 @@
 			<CopyJob>
 				<SourceFolder>$$BSPGEN:INPUT_DIR$$\startup_files</SourceFolder>
 				<TargetFolder>SDK\StartupFiles</TargetFolder>
-				<FilesToCopy>startup_gcc.c;ccfg.c</FilesToCopy>
+				<FilesToCopy>ccfg.c</FilesToCopy>
 				<ProjectInclusionMask>*</ProjectInclusionMask>
 			</CopyJob>
 		</CopyJobs>
